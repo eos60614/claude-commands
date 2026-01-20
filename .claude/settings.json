@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allowedTools": [
+      "Read",
+      "Write",
+      "Edit",
+      "Bash",
+      "Glob",
+      "Grep"
+    ],
+    "deniedTools": []
+  },
+  "hooks": {
+    "postToolCall": {
+      "enabled": true,
+      "script": "./hooks/post-tool.sh"
+    }
+  },
+  "commands": {
+    "autoSuggest": true,
+    "selfInvoke": {
+      "enabled": true,
+      "confirmBeforeRun": true
+    },
+    "registry": {
+      "typescript": "commands/ts",
+      "python": "commands/py"
+    }
+  },
+  "project": {
+    "name": "claude-commands",
+    "type": "cli-tool",
+    "languages": ["typescript", "python"],
+    "packageManager": "npm"
+  }
+}
