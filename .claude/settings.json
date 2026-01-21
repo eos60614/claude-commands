@@ -11,10 +11,17 @@
     "deniedTools": []
   },
   "hooks": {
-    "postToolCall": {
-      "enabled": true,
-      "script": "./hooks/post-tool.sh"
-    }
+    "postToolCall": [
+      {
+        "matcher": {},
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./hooks/post-tool.sh"
+          }
+        ]
+      }
+    ]
   },
   "commands": {
     "autoSuggest": true,

@@ -50,6 +50,13 @@ export const config: CommandConfig = {
       required: false,
       default: 0,
     },
+    {
+      name: 'failFast',
+      description: 'Stop on first failure (default: true)',
+      type: 'boolean',
+      required: false,
+      default: true,
+    },
   ],
   selfInvokable: true,
   triggers: [
@@ -131,7 +138,13 @@ export async function execute(
     cmdArgs.push('--retries', String(args.retries));
   }
 
-  // Always show full output
+  // Fail fast: stop on first failure (default behavior)
+  const failFast = args.failFast !== false;
+  if (failFast) {
+    cmdArgs.push('--max-failures=1');
+  }
+
+  // Always show full output with verbose reporter
   cmdArgs.push('--reporter=list');
 
   return new Promise((resolve) => {
@@ -163,29 +176,72 @@ export async function execute(
       const passedMatch = stdout.match(/(\d+) passed/);
       const failedMatch = stdout.match(/(\d+) failed/);
       const skippedMatch = stdout.match(/(\d+) skipped/);
+      const interruptedMatch = stdout.match(/(\d+) interrupted/);
 
       const passed = passedMatch ? parseInt(passedMatch[1]) : 0;
       const failed = failedMatch ? parseInt(failedMatch[1]) : 0;
       const skipped = skippedMatch ? parseInt(skippedMatch[1]) : 0;
+      const interrupted = interruptedMatch ? parseInt(interruptedMatch[1]) : 0;
 
-      const summary = [
+      // Check for console errors in output
+      const consoleErrors = (stdout + stderr).match(/console\.error|Error:|error:|FAILED|Exception/gi);
+      const hasConsoleErrors = consoleErrors && consoleErrors.length > 0;
+
+      const summaryLines = [
         '',
         '─'.repeat(50),
-        `Test Results: ${success ? '✅ PASSED' : '❌ FAILED'}`,
+        `Test Results: ${success ? 'PASSED' : 'FAILED'}`,
         `  Passed: ${passed}`,
         `  Failed: ${failed}`,
         `  Skipped: ${skipped}`,
-        '─'.repeat(50),
-      ].join('\n');
+      ];
+
+      if (interrupted > 0) {
+        summaryLines.push(`  Interrupted: ${interrupted} (stopped on first failure)`);
+      }
+
+      if (hasConsoleErrors && !success) {
+        summaryLines.push('  Console Errors: Detected (see output above)');
+      }
+
+      summaryLines.push('─'.repeat(50));
+
+      if (failFast && failed > 0) {
+        summaryLines.push('');
+        summaryLines.push('Stopped on first failure. Fix the error above before running remaining tests.');
+      }
+
+      const summary = summaryLines.join('\n');
 
       if (!success) {
-        // Extract error details for failed tests
-        const errorSection = stderr || stdout.split('─'.repeat(50)).pop() || '';
+        // Extract error details - include both stderr and stdout error sections
+        const fullOutput = stdout + '\n' + stderr;
+
+        // Find error blocks in output
+        const errorLines: string[] = [];
+        const lines = fullOutput.split('\n');
+        let inErrorBlock = false;
+
+        for (const line of lines) {
+          if (line.includes('Error:') || line.includes('error:') || line.includes('FAILED') || line.includes('console.error')) {
+            inErrorBlock = true;
+          }
+          if (inErrorBlock) {
+            errorLines.push(line);
+          }
+          if (inErrorBlock && line.trim() === '') {
+            inErrorBlock = false;
+          }
+        }
+
+        const errorDetails = errorLines.length > 0
+          ? errorLines.slice(0, 50).join('\n') // Limit to first 50 error lines
+          : stderr || 'Check output above for error details';
 
         resolve({
           success: false,
           output: stdout + summary,
-          error: `${failed} test(s) failed.\n\n${errorSection}`,
+          error: `${failed} test(s) failed.${failFast ? ' Execution stopped.' : ''}\n\n${errorDetails}`,
         });
       } else {
         resolve({
